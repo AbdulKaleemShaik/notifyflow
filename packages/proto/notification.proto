@@ -1,0 +1,47 @@
+// packages/proto/notification.proto
+// Defines all internal message schemas used across NotifyFlow services.
+//
+// Boundaries:
+//   JobPayload  — API → Worker (via BullMQ / Redis, stored as base64)
+//   WsMessage   — Worker → WS-Server (via Redis Pub/Sub, raw bytes)
+
+syntax = "proto3";
+
+package notifyflow;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JobPayload
+// Encodes the notification job pushed onto the BullMQ queue by the API.
+// Fields mirror the current JSON job object exactly so the worker logic
+// needs no further changes beyond calling decodeJobPayload().
+// ─────────────────────────────────────────────────────────────────────────────
+message JobPayload {
+  string notification_log_id = 1;  // MongoDB ObjectId string of the NotificationLog doc
+  string tenant_id           = 2;  // MongoDB ObjectId string of the Tenant
+  string user_id             = 3;  // Target user identifier
+  string channel             = 4;  // "in-app" | "email" | "webhook"
+  string template_name       = 5;  // Slug of the template to render
+  string tenant_secret       = 6;  // HMAC secret for webhook signing
+  string webhook_url         = 7;  // Tenant-configured webhook endpoint
+  string user_email          = 8;  // Recipient email address (email channel)
+
+  // Arbitrary key-value pairs passed as template variables.
+  // We use a map<string, string> — callers must JSON-stringify nested objects.
+  map<string, string> data = 9;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WsMessage
+// Encodes the notification pushed by the worker to Redis Pub/Sub.
+// The WS-Server decodes this and re-serialises as JSON for the browser.
+// ─────────────────────────────────────────────────────────────────────────────
+message WsMessage {
+  string type            = 1;  // "notification" | "connected" | "pong"
+  string notification_id = 2;  // NotificationLog _id
+  string template_name   = 3;  // Template slug
+  string body            = 4;  // Rendered notification body text
+  string timestamp       = 5;  // ISO-8601 timestamp
+
+  // Same flat map approach as JobPayload.data
+  map<string, string> data = 6;
+}

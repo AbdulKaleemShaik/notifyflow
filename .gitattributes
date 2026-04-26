@@ -1,0 +1,16 @@
+# Normalize line endings to LF in the repository for cross-platform consistency.
+# Git will auto-convert to CRLF on Windows checkouts (core.autocrlf = true handles this).
+
+* text=auto eol=lf
+
+# Explicitly binary — never convert
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary

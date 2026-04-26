@@ -1,0 +1,13 @@
+{
+  "name": "@notifyflow/proto",
+  "version": "1.0.0",
+  "description": "Shared Protocol Buffer definitions and encode/decode helpers for NotifyFlow",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {
+    "protobufjs": "^7.3.2"
+  }
+}

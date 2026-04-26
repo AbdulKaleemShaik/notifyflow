@@ -1,0 +1,19 @@
+{
+  "name": "notifyflow-ws-server",
+  "version": "1.0.0",
+  "description": "NotifyFlow WebSocket server — pushes real-time notifications to browser clients",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@notifyflow/proto": "*",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.3.2",
+    "jsonwebtoken": "^9.0.2",
+    "protobufjs": "^7.3.2",
+    "ws": "^8.17.0"
+  }
+}

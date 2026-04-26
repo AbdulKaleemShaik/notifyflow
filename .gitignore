@@ -1,0 +1,58 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Environment / Secrets ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# Keep .env.example so others know what variables to set
+!.env.example
+
+# ─── Build Outputs ───────────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Runtime / OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+
+# ─── IDE / Editor ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── Testing & Coverage ──────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+# Keep docker-compose files — they are needed to run the project
+
+# ─── Debug / Scratch scripts ─────────────────────────────────────────────────
+# These are one-off dev/debug scripts not needed in production
+debug_db.js
+check_summary.js
+test_api.js
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+*.tgz
+.cache/

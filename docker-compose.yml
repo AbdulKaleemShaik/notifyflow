@@ -1,0 +1,124 @@
+# docker-compose.yml — Development environment (all services)
+
+services:
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  mongo:
+    image: mongo:7
+    container_name: notifyflow-mongo
+    restart: unless-stopped
+    ports:
+      - '27018:27017'   # remapped: use 27018 on host to avoid conflict
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: notifyflow
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: notifyflow-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - '6380:6379'   # remapped: use 6380 on host to avoid conflict
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Application Services ───────────────────────────────────────────────────
+
+  api:
+    build:
+      context: .            # monorepo root — Dockerfile uses paths relative to here
+      dockerfile: apps/api/Dockerfile
+    container_name: notifyflow-api
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    command: ["node", "--watch", "src/app.js"]
+    volumes:
+      - ./apps/api:/app
+      - ./packages/proto:/app/packages/proto  # live-reload shared proto package
+      - /app/node_modules # prevent host node_modules from overlapping container's
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    command: ["node", "--watch", "apps/worker/src/worker.js"]
+    volumes:
+      - .:/app
+      - /app/node_modules # Shield the container's root node_modules
+    environment:
+      - API_MODELS_PATH=/app/apps/api/src/models
+      - API_CONFIG_PATH=/app/apps/api/src/config
+      - API_UTILS_PATH=/app/apps/api/src/utils
+    env_file: .env
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  ws-server:
+    build:
+      context: .            # monorepo root — Dockerfile uses paths relative to here
+      dockerfile: apps/ws-server/Dockerfile
+    container_name: notifyflow-ws
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    command: ["node", "--watch", "src/server.js"]
+    volumes:
+      - ./apps/ws-server:/app
+      - ./packages/proto:/app/packages/proto  # live-reload shared proto package
+      - /app/node_modules
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+        VITE_WS_HOST: localhost
+    container_name: notifyflow-dashboard
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+      - ws-server
+
+volumes:
+  mongo_data:
+    driver: local
+  redis_data:
+    driver: local

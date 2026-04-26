@@ -1,0 +1,12 @@
+{
+  "name": "notifyflow",
+  "version": "1.0.0",
+  "description": "NotifyFlow Notification Engine — monorepo root",
+  "private": true,
+  "workspaces": [
+    "packages/proto",
+    "apps/api",
+    "apps/worker",
+    "apps/ws-server"
+  ]
+}

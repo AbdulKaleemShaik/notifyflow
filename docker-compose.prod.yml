@@ -1,0 +1,48 @@
+# docker-compose.prod.yml — Production overrides.
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.9'
+
+services:
+  api:
+    restart: always
+    environment:
+      NODE_ENV: production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    restart: always
+    environment:
+      NODE_ENV: production
+    deploy:
+      replicas: 3  # Scale up for production load
+
+  ws-server:
+    restart: always
+    environment:
+      NODE_ENV: production
+
+  dashboard:
+    restart: always
+    build:
+      args:
+        VITE_API_URL: ${PROD_API_URL:-https://api.notifyflow.example.com}
+        VITE_WS_HOST: ${PROD_WS_HOST:-ws.notifyflow.example.com}
+
+  mongo:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 512M
