@@ -1,0 +1,263 @@
+openapi: 3.0.3
+info:
+  title: NotifyFlow API
+  version: 1.0.0
+  description: |
+    Multi-tenant notification engine. A tenant exchanges its API key for a short-lived JWT,
+    then enqueues notifications that the worker delivers over in-app (WebSocket), email and webhook channels.
+
+    **Auth flow**
+    1. `POST /auth/token` with the tenant API key → access token (15 min) + refresh token (7 days)
+    2. Send `Authorization: Bearer <accessToken>` on every other request
+    3. `POST /auth/refresh` rotates the refresh token; the old one is revoked in Redis
+
+    All data is scoped to the tenant in the token.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Auth
+  - name: Notifications
+  - name: Templates
+  - name: Analytics
+  - name: Ops
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string, example: MISSING_TOKEN }
+        field: { type: string }
+    TokenPair:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer, example: 900 }
+    Template:
+      type: object
+      properties:
+        name: { type: string, example: order_confirmed }
+        subject: { type: string, example: 'Order {{orderId}} confirmed' }
+        body: { type: string, example: 'Hi {{firstName}}, your order {{orderId}} is confirmed.' }
+        channels:
+          type: array
+          items: { type: string, enum: [in-app, email, webhook] }
+        isActive: { type: boolean }
+        version: { type: integer }
+  responses:
+    Unauthorized:
+      description: Missing, malformed or expired token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Not found in this tenant
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+security:
+  - bearerAuth: []
+paths:
+  /auth/token:
+    post:
+      tags: [Auth]
+      summary: Exchange a tenant API key for a JWT pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [apiKey]
+              properties:
+                apiKey: { type: string, example: 3f9c...e21a (64 hex characters, printed by seed.js) }
+      responses:
+        '200':
+          description: Token pair issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/TokenPair'
+                  - type: object
+                    properties:
+                      tenantId: { type: string }
+                      tenantName: { type: string }
+        '400': { description: apiKey missing, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '401': { description: Invalid API key, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token
+      description: Verifies the refresh token, revokes it in Redis and issues a fresh pair. Reusing an old token is rejected.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: New token pair, content: { application/json: { schema: { $ref: '#/components/schemas/TokenPair' } } } }
+        '401': { description: Refresh token invalid, expired or revoked (REFRESH_TOKEN_REVOKED) }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current refresh token
+      responses:
+        '200': { description: Logged out }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /notify:
+    post:
+      tags: [Notifications]
+      summary: Queue a notification on one or more channels
+      description: |
+        Validates the request, writes a `NotificationLog` per channel and enqueues one BullMQ job per channel
+        (payload encoded with Protocol Buffers). Responds `202` immediately; delivery happens in the worker
+        with retries, exponential backoff and a dead-letter queue.
+
+        Rate limited per tenant with a Redis sliding window; every response carries
+        `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, templateName, channels]
+              properties:
+                userId: { type: string, example: user-abc123 }
+                templateName: { type: string, pattern: '^[a-z0-9_-]+$', example: order_confirmed }
+                channels:
+                  type: array
+                  items: { type: string, enum: [in-app, email, webhook] }
+                data:
+                  type: object
+                  additionalProperties: true
+                  example: { firstName: Alice, orderId: ORD-9821, userEmail: alice@example.com }
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  jobIds: { type: array, items: { type: string } }
+        '400': { description: Validation error, or a channel the template does not support }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Template not found for this tenant }
+        '429': { description: Tenant rate limit exceeded }
+  /templates:
+    get:
+      tags: [Templates]
+      summary: List the tenant's templates
+      responses:
+        '200': { description: Templates, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Template' } } } } }
+    post:
+      tags: [Templates]
+      summary: Create a template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, body, channels]
+              properties:
+                name: { type: string }
+                subject: { type: string }
+                body: { type: string, description: 'Supports {{variable}} and {{nested.key}} placeholders' }
+                channels: { type: array, items: { type: string, enum: [in-app, email, webhook] } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } } }
+        '400': { description: Validation error }
+        '409': { description: A template with this name already exists }
+  /templates/{name}:
+    parameters:
+      - { in: path, name: name, required: true, schema: { type: string } }
+    get:
+      tags: [Templates]
+      summary: Get one template
+      responses:
+        '200': { description: Template, content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Templates]
+      summary: Update a template (bumps its version)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subject: { type: string }
+                body: { type: string }
+                channels: { type: array, items: { type: string, enum: [in-app, email, webhook] } }
+                isActive: { type: boolean }
+      responses:
+        '200': { description: Updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Templates]
+      summary: Delete a template
+      responses:
+        '200': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /templates/{name}/preview:
+    get:
+      tags: [Templates]
+      summary: Render a template with sample data
+      parameters:
+        - { in: path, name: name, required: true, schema: { type: string } }
+        - in: query
+          name: data
+          description: JSON object of template variables
+          schema: { type: string, example: '{"firstName":"Alice","orderId":"ORD-1"}' }
+      responses:
+        '200': { description: Rendered subject and body }
+        '400': { description: data is not valid JSON }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Today's delivery metrics (single $facet aggregation)
+      responses:
+        '200':
+          description: Totals, per-channel counts, average latency and dead-letter count
+  /analytics/logs:
+    get:
+      tags: [Analytics]
+      summary: Paginated, filterable notification log
+      parameters:
+        - { in: query, name: status, schema: { type: string, enum: [queued, processing, delivered, failed, dead_letter] } }
+        - { in: query, name: channel, schema: { type: string, enum: [in-app, email, webhook] } }
+        - { in: query, name: page, schema: { type: integer, default: 1, minimum: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 50, maximum: 100 } }
+      responses:
+        '200': { description: Log entries with pagination }
+  /health:
+    get:
+      tags: [Ops]
+      summary: Liveness and MongoDB connection state
+      security: []
+      responses:
+        '200': { description: OK }
+  /metrics:
+    get:
+      tags: [Ops]
+      summary: Prometheus metrics
+      description: |
+        Process metrics plus `notifyflow_http_request_duration_seconds` (by method, route, status)
+        and `notifyflow_queue_jobs` (BullMQ jobs by state: waiting, active, completed, failed, delayed).
+      security: []
+      responses:
+        '200': { description: Prometheus text exposition format, content: { text/plain: {} } }
