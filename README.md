@@ -1,5 +1,7 @@
 # NotifyFlow — Multi-Tenant Notification Engine
 
+[![CI](https://github.com/AbdulKaleemShaik/notifyflow/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdulKaleemShaik/notifyflow/actions/workflows/ci.yml)
+
 > A production-grade, multi-channel notification delivery platform built for reliability, observability, and scale — supporting in-app, email, and webhook channels with real-time WebSocket push, async queue processing, and a full analytics pipeline.
 
 ---
@@ -18,9 +20,10 @@
 10. [Sample Input / Output](#-sample-input--output)
 11. [Edge Cases & Handling](#-edge-cases--handling)
 12. [Performance & Optimization](#-performance--optimization)
-13. [Screenshots / Demo](#-screenshots--demo)
-14. [Future Improvements](#-future-improvements)
-15. [Conclusion](#-conclusion)
+13. [Testing](#-testing)
+14. [Screenshots / Demo](#-screenshots--demo)
+15. [Future Improvements](#-future-improvements)
+16. [Conclusion](#-conclusion)
 
 ---
 
@@ -512,6 +515,24 @@ X-NotifyFlow-DeliveryId: 6632ab...
 
 ### Template Rendering
 - **In-memory** Mustache-style substitution (no I/O) — rendering is the fastest step in the pipeline
+
+---
+
+## 🧪 Testing
+
+Unit and integration tests use **Jest** (ESM). Worker business logic is dependency-injected (`apps/worker/src/processor.js`) so it can be tested without real infrastructure.
+
+| App | What is covered |
+|---|---|
+| `apps/api` | JWT access/refresh rotation and revocation, tenant API-key auth, sliding-window rate limiter (unit + live Redis), notify endpoint validation |
+| `apps/worker` | Idempotent skip of delivered jobs, retry classification (retryable vs permanent), dead-letter handling, HMAC-signed webhooks, channel dispatchers, template rendering |
+
+```bash
+cd apps/api && npm test      # 53 tests
+cd apps/worker && npm test   # 91 tests
+```
+
+Tests named `*.redis.test.js` run against a real Redis when one is reachable on `REDIS_HOST:REDIS_PORT` and are skipped otherwise. CI (GitHub Actions) starts a Redis service container, so they always run there.
 
 ---
 
