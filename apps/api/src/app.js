@@ -12,10 +12,15 @@ import authRouter from './routes/auth.js';
 import notifyRouter from './routes/notify.js';
 import templatesRouter from './routes/templates.js';
 import analyticsRouter from './routes/analytics.js';
+import { metricsMiddleware, metricsHandler } from './metrics.js';
+import { spec, serveDocs, setupDocs } from './docs/index.js';
 
 const app = express();
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
+
+// Record request latency for Prometheus.
+app.use(metricsMiddleware);
 
 // Parse JSON request bodies.
 app.use(express.json());
@@ -43,6 +48,11 @@ app.get('/health', (_req, res) => {
     mongoState: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
   });
 });
+
+// Prometheus scrape endpoint and API docs — no auth required.
+app.get('/metrics', metricsHandler);
+app.get('/docs.json', (_req, res) => res.json(spec));
+app.use('/docs', serveDocs, setupDocs);
 
 app.use('/auth', authRouter);
 app.use('/notify', authenticate, notifyRouter);
