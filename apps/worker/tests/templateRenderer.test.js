@@ -66,3 +66,69 @@ describe('templateRenderer.render()', () => {
     expect(result).toBe('hello and {{unknown}}');
   });
 });
+
+// ─── Edge cases ───────────────────────────────────────────────────────────────
+// These pin down current behaviour so changes to the renderer are deliberate.
+
+describe('templateRenderer.render() — edge cases', () => {
+  test('returns non-string templates untouched', () => {
+    expect(render(null, { a: 1 })).toBeNull();
+    expect(render(undefined, { a: 1 })).toBeUndefined();
+    expect(render(42, { a: 1 })).toBe(42);
+  });
+
+  test('falsy-but-defined values are rendered, not treated as missing', () => {
+    expect(render('{{zero}}|{{no}}|{{empty}}', { zero: 0, no: false, empty: '' })).toBe('0|false|');
+  });
+
+  test('null values render as the string "null"', () => {
+    expect(render('Hi {{name}}', { name: null })).toBe('Hi null');
+  });
+
+  test('object values are stringified with String() (not JSON)', () => {
+    expect(render('{{order}}', { order: { id: 1 } })).toBe('[object Object]');
+    expect(render('{{tags}}', { tags: ['a', 'b'] })).toBe('a,b');
+  });
+
+  test('a missing intermediate key keeps the placeholder (no TypeError)', () => {
+    expect(render('{{user.address.city}}', { user: {} })).toBe('{{user.address.city}}');
+    expect(render('{{user.name}}', { user: null })).toBe('{{user.name}}');
+  });
+
+  test('array indexes work via dot-notation', () => {
+    expect(render('{{items.0.sku}}', { items: [{ sku: 'SKU-1' }] })).toBe('SKU-1');
+  });
+
+  test('the same placeholder is replaced everywhere it appears', () => {
+    expect(render('{{n}} + {{n}} = {{sum}}', { n: 2, sum: 4 })).toBe('2 + 2 = 4');
+  });
+
+  test('placeholders with spaces or hyphens are not recognised (kept verbatim)', () => {
+    expect(render('{{ name }} {{first-name}}', { name: 'A', 'first-name': 'B' })).toBe('{{ name }} {{first-name}}');
+  });
+
+  test('single braces and unclosed tags are left alone', () => {
+    expect(render('{name} {{name}', { name: 'A' })).toBe('{name} {{name}');
+  });
+
+  test('does NOT HTML-escape values (callers must sanitise untrusted data)', () => {
+    expect(render('<p>{{msg}}</p>', { msg: '<script>x</script>' })).toBe('<p><script>x</script></p>');
+  });
+
+  test('inserted values are not re-scanned for placeholders (no template injection)', () => {
+    expect(render('{{a}}', { a: '{{b}}', b: 'secret' })).toBe('{{b}}');
+  });
+
+  test('non-object data (string/number) is treated as empty', () => {
+    expect(render('{{length}}', 'hello')).toBe('{{length}}');
+    expect(render('{{x}}', 5)).toBe('{{x}}');
+  });
+
+  test('renders large templates quickly (linear single pass)', () => {
+    const tpl = 'Hi {{name}}! '.repeat(10_000);
+    const started = Date.now();
+    const out = render(tpl, { name: 'Bob' });
+    expect(out).toBe('Hi Bob! '.repeat(10_000));
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+});
