@@ -500,7 +500,7 @@ X-NotifyFlow-DeliveryId: 6632ab...
 
 ### Queue Throughput
 - **BullMQ concurrency=5 per worker, 2 replicas** → up to 10 jobs processed in parallel without shared-state contention (BullMQ uses Redis BRPOPLPUSH locking internally)
-- **Protobuf serialization** saves ~25–40% payload size over JSON on the internal Redis bus, reducing Redis memory pressure and network I/O at scale
+- **Protobuf serialization** produces smaller, schema-checked payloads than JSON on the internal Redis bus, reducing Redis memory pressure and network I/O at scale
 
 ### Database
 - **Compound index** `{ tenantId, status, createdAt: -1 }` on `NotificationLog` makes the dashboard query O(log N + page size) regardless of collection size
