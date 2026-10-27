@@ -4,16 +4,12 @@
 // Refresh tokens: 7d TTL, signed with JWT_REFRESH_SECRET, stored in Redis.
 
 import jwt from 'jsonwebtoken';
-import IORedis from 'ioredis';
 import config from '../config/index.js';
+import { createRedisClient } from '../config/redis.js';
 import logger from '../utils/logger.js';
 
 // Single Redis client for token storage (not in subscribe mode).
-const redis = new IORedis({
-  host: config.redisHost,
-  port: config.redisPort,
-  lazyConnect: true,
-});
+const redis = createRedisClient({ lazyConnect: true });
 
 redis.on('error', (err) => logger.error('Auth Redis client error:', err.message));
 

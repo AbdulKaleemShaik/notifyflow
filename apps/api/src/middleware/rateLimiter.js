@@ -9,15 +9,10 @@
 //     3. ZCARD — count entries in the window
 //   If count > tenant.rateLimit → 429
 
-import IORedis from 'ioredis';
-import config from '../config/index.js';
+import { createRedisClient } from '../config/redis.js';
 import logger from '../utils/logger.js';
 
-const redis = new IORedis({
-  host: config.redisHost,
-  port: config.redisPort,
-  lazyConnect: true,
-});
+const redis = createRedisClient({ lazyConnect: true });
 
 redis.on('error', (err) => logger.error('RateLimiter Redis error:', err.message));
 

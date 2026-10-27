@@ -4,15 +4,11 @@
 // They never communicate directly — decoupled via Redis.
 // Messages are encoded with Protocol Buffers before publishing for compact, schema-safe transfer.
 
-import IORedis from 'ioredis';
+import { createRedisClient } from '../utils/redis.js';
 import { encodeWsMessage } from '@notifyflow/proto';
 
 // Dedicated publisher client — cannot be in subscribe mode simultaneously.
-const redisPublisher = new IORedis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  lazyConnect: true,
-});
+const redisPublisher = createRedisClient({ lazyConnect: true });
 
 redisPublisher.on('error', (err) => {
   console.error('[websocketDispatcher] Redis publisher error:', err.message);

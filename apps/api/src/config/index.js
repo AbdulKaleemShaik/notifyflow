@@ -7,6 +7,8 @@ import 'dotenv/config';
 const config = {
   port: process.env.PORT || 3000,
   mongoUri: process.env.MONGO_URI,
+  // REDIS_URL (redis:// or rediss://) overrides host/port — needed for managed Redis (Upstash).
+  redisUrl: process.env.REDIS_URL,
   redisHost: process.env.REDIS_HOST || 'localhost',
   redisPort: Number(process.env.REDIS_PORT) || 6379,
   jwtSecret: process.env.JWT_SECRET,

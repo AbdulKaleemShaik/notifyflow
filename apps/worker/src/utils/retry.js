@@ -13,6 +13,11 @@
  */
 export function classifyError(err, channel) {
   const msg = (err.message || '').toLowerCase();
+  // Matches "timeout", "timed out" (our webhook timeout message) and ETIMEDOUT socket errors.
+  const isTimeout = err.timeout === true
+    || msg.includes('timeout')
+    || msg.includes('timed out')
+    || msg.includes('etimedout');
 
   if (channel === 'email') {
     // SMTP auth failures — retrying will not help.
@@ -24,7 +29,7 @@ export function classifyError(err, channel) {
       return { shouldRetry: false, reason: 'INVALID_RECIPIENT' };
     }
     // Network timeouts — transient, should retry.
-    if (msg.includes('timeout') || msg.includes('econnrefused') || msg.includes('enotfound')) {
+    if (isTimeout || msg.includes('econnrefused') || msg.includes('enotfound')) {
       return { shouldRetry: true, reason: 'NETWORK_TIMEOUT' };
     }
   }
@@ -40,7 +45,7 @@ export function classifyError(err, channel) {
       return { shouldRetry: true, reason: `HTTP_${status}_SERVER_ERROR` };
     }
     // Timeout
-    if (msg.includes('timeout')) {
+    if (isTimeout) {
       return { shouldRetry: true, reason: 'WEBHOOK_TIMEOUT' };
     }
   }

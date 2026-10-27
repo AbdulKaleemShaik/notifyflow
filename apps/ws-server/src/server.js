@@ -18,10 +18,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // Single subscriber instance — psubscribe handles ALL user channels efficiently.
 // Creating a new subscription per user would cause Redis connection explosion at scale.
 
-const redisSubscriber = new IORedis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT) || 6379,
-});
+// REDIS_URL (redis:// or rediss:// for Upstash) takes precedence over REDIS_HOST/REDIS_PORT.
+const redisSubscriber = process.env.REDIS_URL
+  ? new IORedis(process.env.REDIS_URL)
+  : new IORedis({
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT) || 6379,
+  });
 
 redisSubscriber.on('error', (err) => {
   console.error('[ws-server] Redis subscriber error:', err.message);

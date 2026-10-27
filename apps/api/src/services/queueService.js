@@ -4,14 +4,12 @@
 // Job payloads are encoded with Protocol Buffers for compact, schema-enforced wire format.
 
 import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
 import config from '../config/index.js';
+import { createRedisClient } from '../config/redis.js';
 import logger from '../utils/logger.js';
 import { encodeJobPayload } from '@notifyflow/proto';
 
-const redisConnection = new IORedis({
-  host: config.redisHost,
-  port: config.redisPort,
+const redisConnection = createRedisClient({
   maxRetriesPerRequest: null, // required by BullMQ
   lazyConnect: true,
 });
