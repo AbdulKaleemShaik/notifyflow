@@ -20,10 +20,11 @@
 10. [Sample Input / Output](#-sample-input--output)
 11. [Edge Cases & Handling](#-edge-cases--handling)
 12. [Performance & Optimization](#-performance--optimization)
-13. [Testing](#-testing)
-14. [Screenshots / Demo](#-screenshots--demo)
-15. [Future Improvements](#-future-improvements)
-16. [Conclusion](#-conclusion)
+13. [Observability](#-observability)
+14. [Testing](#-testing)
+15. [Screenshots / Demo](#-screenshots--demo)
+16. [Future Improvements](#-future-improvements)
+17. [Conclusion](#-conclusion)
 
 ---
 
@@ -309,25 +310,32 @@ curl -s -X POST http://localhost:3000/notify \
 
 ## 📡 API Documentation
 
-All endpoints (except `/health` and `/auth/*`) require:
+> **Interactive docs:** with the API running, open **http://localhost:3000/docs** (Swagger UI). The OpenAPI 3 spec is at `/docs.json` and lives in [`apps/api/src/docs/openapi.yaml`](apps/api/src/docs/openapi.yaml).
+
+Tenants are created by `seed.js`, which prints each tenant's API key once (only its bcrypt hash is stored). Clients exchange that key for a short-lived JWT; every endpoint except `/health`, `/metrics`, `/docs` and `/auth/*` requires:
 ```
-Authorization: Bearer <plain-text-api-key>
+Authorization: Bearer <accessToken>
 ```
 
-### `POST /auth/register`
-Register a new tenant. Returns the plaintext API key (shown once).
+### `POST /auth/token`
+Exchange a tenant API key for a JWT pair (access token 15 min, refresh token 7 days, stored in Redis).
 
 ```json
 // Request
-{ "name": "Acme Corp" }
+{ "apiKey": "<64-character hex key printed by seed.js>" }
 
-// Response 201
+// Response 200
 {
-  "message": "Tenant registered",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
+  "expiresIn": 900,
   "tenantId": "6632ab...",
-  "apiKey": "nf_live_xxxxxxxxxxxxxxxx"
+  "tenantName": "Acme Corp"
 }
 ```
+
+### `POST /auth/refresh` · `POST /auth/logout`
+`/auth/refresh` takes `{ "refreshToken": "..." }`, revokes it in Redis and returns a fresh pair; reusing a rotated token returns `401 REFRESH_TOKEN_REVOKED`. `/auth/logout` revokes the current refresh token.
 
 ---
 
@@ -515,6 +523,28 @@ X-NotifyFlow-DeliveryId: 6632ab...
 
 ### Template Rendering
 - **In-memory** Mustache-style substitution (no I/O) — rendering is the fastest step in the pipeline
+
+---
+
+## 🔭 Observability
+
+The API exposes Prometheus metrics at **`GET /metrics`** (via `prom-client`):
+
+| Metric | Type | Labels | Use |
+|---|---|---|---|
+| `notifyflow_http_request_duration_seconds` | Histogram | `method`, `route`, `status` | p50/p95/p99 latency and error rate per endpoint |
+| `notifyflow_queue_jobs` | Gauge | `state` (waiting, active, completed, failed, delayed) | Queue backlog and failure trends; alert when `waiting` keeps growing |
+| Node.js defaults | Various | | CPU, memory, event-loop lag, GC |
+
+Routes are labelled by their pattern (e.g. `/templates/:name`), not the raw URL, so label cardinality stays bounded. Example Prometheus queries:
+
+```promql
+# p95 latency of POST /notify
+histogram_quantile(0.95, sum by (le) (rate(notifyflow_http_request_duration_seconds_bucket{route="/notify/"}[5m])))
+
+# Jobs waiting to be delivered
+notifyflow_queue_jobs{state="waiting"}
+```
 
 ---
 
